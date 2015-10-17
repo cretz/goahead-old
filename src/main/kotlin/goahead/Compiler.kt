@@ -1,0 +1,3 @@
+package goahead
+
+class Compiler()
