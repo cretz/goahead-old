@@ -26,6 +26,10 @@ class IntegrationTest(val spec: IntegrationTest.TestSpec) {
 
     @Test
     fun test() {
-
+        TODO("""
+            * Compile all classes to temporary dir
+            * Run "gofmt -e -l" to make sure our printer is clean
+            * Run "go run whatever.go" and confirm expected output
+        """)
     }
 }

@@ -7,9 +7,28 @@ import goahead.GoNode.Statement.*
 import goahead.GoNode.Specification.*
 
 class GoNodeBuilder {
-    val builder = StringBuilder()
+    companion object {
+        fun fromNode(node: GoNode) = GoNodeBuilder().appendGoNode(node).toString()
+    }
 
-    fun StringBuilder.indent() = this.append('\t')
+    val builder = StringBuilder()
+    var indention = 0
+
+    fun StringBuilder.indent(): StringBuilder {
+        indention++
+        return this
+    }
+
+    fun StringBuilder.dedent(): StringBuilder {
+        indention--
+        return this
+    }
+
+    fun StringBuilder.newline(): StringBuilder {
+        appendln()
+        for (i in 1..indention) append('\t')
+        return this
+    }
 
     fun appendArrayType(expr: ArrayType): StringBuilder {
         TODO()
@@ -117,23 +136,8 @@ class GoNodeBuilder {
     }
 
     fun appendFile(file: File): StringBuilder {
-        builder.append("package ").appendln(file.packageName).appendln().appendln()
-
-        builder.append("import (").appendln()
-        file.imports.forEach {
-            builder.indent()
-            // Should be fixed in https://github.com/jetbrains/kotlin/commit/4b35e3b1358dda468ec3eb8538ed4655302b7063
-            // per https://youtrack.jetbrains.com/issue/KT-8643
-            // if (it.name != null) appendIdentifier(it.name).append(' ')
-            if (it.name != null) appendIdentifier(it.name!!).append(' ')
-            appendBasicLiteral(it.path).appendln()
-        }
-        builder.append(')').appendln().appendln()
-
-        file.declarations.forEach {
-            appendDeclaration(it).appendln().appendln()
-        }
-
+        builder.append("package ").append(file.packageName).newline().newline()
+        file.declarations.forEach { appendDeclaration(it).newline().newline() }
         return builder
     }
 

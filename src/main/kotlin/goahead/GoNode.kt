@@ -10,111 +10,110 @@ sealed abstract class GoNode {
     /**
      * @property text It's a multiline comment if it contains newlines
      */
-    data class Comment(var text: String) : GoNode()
+    data class Comment(val text: String) : GoNode()
 
     data class Field(
-        var names: MutableList<Expression.Identifier>,
-        var type: Expression,
-        var tag: Expression.BasicLiteral?
+        val names: List<Expression.Identifier>,
+        val type: Expression,
+        val tag: Expression.BasicLiteral? = null
     ) : GoNode()
 
     data class File(
-        var packageName: Expression.Identifier,
-        var declarations: MutableList<Declaration> = arrayListOf(),
-        var imports: MutableList<Specification.ImportSpecification> = arrayListOf()
+        val packageName: Expression.Identifier,
+        val declarations: List<Declaration>
     ) : GoNode()
 
     data class Package(
-        var name: String,
-        var files: MutableList<File>
+        val name: String,
+        val files: List<File>
     ) : GoNode()
 
     sealed abstract class Expression : GoNode() {
 
-        data class Identifier(var name: String) : Expression()
+        data class Identifier(val name: String) : Expression()
 
-        data class Ellipsis(var elementType: Expression?) : Expression()
+        data class Ellipsis(val elementType: Expression?) : Expression()
 
         data class BasicLiteral(
-            var token: Token,
-            var value: String
+            val token: Token,
+            val value: String
         ) : Expression()
 
         data class FunctionLiteral(
-            var type: FunctionType,
-            var body: Statement.BlockStatement
+            val type: FunctionType,
+            val body: Statement.BlockStatement
         ) : Expression()
 
         data class CompositeLiteral(
-            var type: Expression?,
-            var elements: MutableList<Expression>
+            val type: Expression?,
+            val elements: List<Expression>
         ) : Expression()
 
-        data class ParenthesizedExpression(var expression: Expression) : Expression()
+        data class ParenthesizedExpression(val expression: Expression) : Expression()
 
         data class SelectorExpression(
-            var expression: Expression,
-            var selector: Identifier
+            val expression: Expression,
+            val selector: Identifier
         ) : Expression()
 
         data class IndexExpression(
-            var expression: Expression,
-            var index: Expression
+            val expression: Expression,
+            val index: Expression
         ) : Expression()
 
         data class SliceExpression(
-            var expression: Expression,
-            var low: Expression?,
-            var high: Expression?,
-            var max: Expression?,
-            var slice3: Boolean
+            val expression: Expression,
+            val low: Expression?,
+            val high: Expression?,
+            val max: Expression?,
+            val slice3: Boolean
         ) : Expression()
 
         data class TypeAssertExpression(
-            var expression: Expression,
-            var type: Expression?
+            val expression: Expression,
+            val type: Expression?
         ) : Expression()
 
         data class CallExpression(
-            var function: Expression,
-            var args: MutableList<Expression>
+            val function: Expression,
+            val args: List<Expression>
         ) : Expression()
 
-        data class StarExpression(var expression: Expression) : Expression()
+        data class StarExpression(val expression: Expression) : Expression()
 
         data class UnaryExpression(
-            var operator: Token,
-            var operand: Expression
+            val operator: Token,
+            val operand: Expression
         ) : Expression()
 
         data class BinaryExpression(
-            var left: Expression,
-            var operator: Token,
-            var right: Expression
+            val left: Expression,
+            val operator: Token,
+            val right: Expression
         ) : Expression()
 
         data class KeyValueExpression(
-            var key: Expression,
-            var value: Expression
+            val key: Expression,
+            val value: Expression
         ) : Expression()
 
         data class ArrayType(
-            var length: Expression,
-            var type: Expression
+            val type: Expression,
+            val length: Expression? = null
         ) : Expression()
 
-        data class StructType(var fields: MutableList<Field>) : Expression()
+        data class StructType(val fields: List<Field>) : Expression()
 
         data class FunctionType(
-            var parameters: MutableList<Field>,
-            var results: MutableList<Field>
+            val parameters: List<Field>,
+            val results: List<Field>
         ) : Expression()
 
-        data class InterfaceType(var methods: MutableList<Field>) : Expression()
+        data class InterfaceType(val methods: List<Field>) : Expression()
 
         data class MapType(
-            var key: Expression,
-            var value: Expression
+            val key: Expression,
+            val value: Expression
         ) : Expression()
 
         enum class ChannelDirection {
@@ -122,129 +121,129 @@ sealed abstract class GoNode {
         }
 
         data class ChannelType(
-            var direction: ChannelDirection,
-            var value: Expression
+            val direction: ChannelDirection,
+            val value: Expression
         ) : Expression()
     }
 
     sealed abstract class Statement : GoNode() {
 
-        data class DeclarationStatement(var declaration: Declaration) : Statement()
+        data class DeclarationStatement(val declaration: Declaration) : Statement()
 
         object EmptyStatement : Statement()
 
         data class LabeledStatement(
-            var label: Expression.Identifier,
-            var statement: Statement
+            val label: Expression.Identifier,
+            val statement: Statement
         ) : Statement()
 
-        data class ExpressionStatement(var expressioon: Expression) : Statement()
+        data class ExpressionStatement(val expressioon: Expression) : Statement()
 
         data class SendStatement(
-            var channel: Expression,
-            var value: Expression
+            val channel: Expression,
+            val value: Expression
         ) : Statement()
 
         data class IncrementDecrementStatement(
-            var expression: Expression,
-            var token: Token
+            val expression: Expression,
+            val token: Token
         ) : Statement()
 
         data class AssignStatement(
-            var left: MutableList<Expression>,
-            var token: Token,
-            var right: MutableList<Expression>
+            val left: List<Expression>,
+            val token: Token,
+            val right: List<Expression>
         ) : Statement()
 
-        data class GoStatement(var call: Expression.CallExpression) : Statement()
+        data class GoStatement(val call: Expression.CallExpression) : Statement()
 
-        data class DeferStatement(var call: Expression.CallExpression) : Statement()
+        data class DeferStatement(val call: Expression.CallExpression) : Statement()
 
-        data class ReturnStatement(var results: MutableList<Expression>) : Statement()
+        data class ReturnStatement(val results: List<Expression>) : Statement()
 
         data class BranchStatement(
-            var token: Token,
-            var label: Expression.Identifier?
+            val token: Token,
+            val label: Expression.Identifier?
         ) : Statement()
 
-        data class BlockStatement(var statements: MutableList<Statement>) : Statement()
+        data class BlockStatement(val statements: List<Statement>) : Statement()
 
         data class IfStatement(
-            var init: Statement?,
-            var condition: Expression,
-            var body: BlockStatement,
-            var elseStatement: Statement?
+            val init: Statement? = null,
+            val condition: Expression,
+            val body: BlockStatement,
+            val elseStatement: Statement? = null
         ) : Statement()
 
         data class CaseClause(
-            var expressions: MutableList<Expression>,
-            var body: BlockStatement
+            val expressions: List<Expression>,
+            val body: BlockStatement
         ) : Statement()
 
         data class SwitchStatement(
-            var init: Statement?,
-            var tag: Expression?,
-            var body: BlockStatement
+            val init: Statement?,
+            val tag: Expression?,
+            val body: BlockStatement
         ) : Statement()
 
         data class CommClause(
-            var comm: Statement?,
-            var body: MutableList<Statement>
+            val comm: Statement?,
+            val body: List<Statement>
         ) : Statement()
 
-        data class SelectStatement(var body: BlockStatement) : Statement()
+        data class SelectStatement(val body: BlockStatement) : Statement()
 
         data class ForStatement(
-            var init: Statement?,
-            var condition: Statement?,
-            var post: Statement?,
-            var body: BlockStatement
+            val init: Statement?,
+            val condition: Statement?,
+            val post: Statement?,
+            val body: BlockStatement
         ) : Statement()
 
         data class RangeStatement(
-            var key: Expression?,
-            var value: Expression?,
-            var token: Token?,
-            var expression: Expression,
-            var body: BlockStatement
+            val key: Expression?,
+            val value: Expression?,
+            val token: Token?,
+            val expression: Expression,
+            val body: BlockStatement
         ) : Statement()
     }
 
     sealed abstract class Specification : GoNode() {
 
         data class ImportSpecification(
-            var name: Expression.Identifier?,
-            var path: Expression.BasicLiteral
+            val name: Expression.Identifier?,
+            val path: Expression.BasicLiteral
         ) : Specification()
 
         data class ValueSpecification(
-            var names: MutableList<Expression.Identifier>,
-            var type: Expression?,
-            var values: MutableList<Expression.Identifier>
+            val names: List<Expression.Identifier>,
+            val type: Expression?,
+            val values: List<Expression.Identifier>
         ) : Specification()
 
         data class TypeSpecification(
-            var name: Expression.Identifier,
-            var type: Expression
+            val name: Expression.Identifier,
+            val type: Expression
         ) : Specification()
     }
 
     sealed abstract class Declaration : GoNode() {
 
         data class GenericDeclaration(
-            var token: Token,
-            var specifications: MutableList<Specification>
+            val token: Token,
+            val specifications: List<Specification>
         ) : Declaration()
 
         data class FunctionDeclaration(
-            var receivers: MutableList<Field>,
-            var name: Expression.Identifier,
-            var type: Expression.FunctionType,
-            var body: Statement.BlockStatement?
+            val receivers: List<Field>,
+            val name: Expression.Identifier,
+            val type: Expression.FunctionType,
+            val body: Statement.BlockStatement?
         ) : Declaration()
     }
 
-    enum class Token(var string: String? = null) {
+    enum class Token(val string: String? = null) {
         // Special tokens
         ILLEGAL(),
         EOF(),
