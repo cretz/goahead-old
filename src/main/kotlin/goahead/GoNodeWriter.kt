@@ -6,9 +6,9 @@ import goahead.GoNode.Declaration.*
 import goahead.GoNode.Statement.*
 import goahead.GoNode.Specification.*
 
-class GoNodeBuilder {
+class GoNodeWriter {
     companion object {
-        fun fromNode(node: GoNode) = GoNodeBuilder().appendGoNode(node).toString()
+        fun fromNode(node: GoNode) = GoNodeWriter().appendGoNode(node).toString()
     }
 
     val builder = StringBuilder()
@@ -30,22 +30,44 @@ class GoNodeBuilder {
         return this
     }
 
+    fun <T : GoNode> List<T>.commaSeparated(f: GoNodeWriter.(T) -> Any): StringBuilder {
+        this.withIndex().forEach {
+            if (it.index > 0) builder.append(", ")
+            f(it.value)
+        }
+        return builder
+    }
+
     fun appendArrayType(expr: ArrayType): StringBuilder {
-        TODO()
+        builder.append('[')
+        if (expr.length != null) appendExpression(expr.length)
+        builder.append(']')
+        return appendExpression(expr.type)
     }
 
     fun appendAssignStatement(stmt: AssignStatement): StringBuilder {
-        TODO()
+        stmt.left.commaSeparated { appendExpression(it) }
+        when (stmt.token) {
+            Token.ASSIGN -> builder.append(" = ")
+            Token.DEFINE -> builder.append(" := ")
+            else -> error("Unrecognized token: " + stmt.token)
+        }
+        return stmt.right.commaSeparated { appendExpression(it) }
     }
 
     fun appendBasicLiteral(lit: BasicLiteral) = builder.append(lit.value)
 
     fun appendBinaryExpression(expr: BinaryExpression): StringBuilder {
-        TODO()
+        require(expr.operator.string != null)
+        appendExpression(expr.left).append(' ').append(expr.operator.string).append(' ')
+        return appendExpression(expr.right)
     }
 
     fun appendBlockStatement(stmt: BlockStatement): StringBuilder {
-        TODO()
+        if (stmt.statements.isEmpty()) return builder.append("{ }")
+        builder.append('{').indent()
+        stmt.statements.forEach { builder.newline(); appendStatement(it) }
+        return builder.dedent().newline().append('}')
     }
 
     fun appendBranchStatement(stmt: BranchStatement): StringBuilder {
@@ -53,7 +75,9 @@ class GoNodeBuilder {
     }
 
     fun appendCallExpression(expr: CallExpression): StringBuilder {
-        TODO()
+        appendExpression(expr.function).append('(')
+        expr.args.commaSeparated { appendExpression(it) }
+        return builder.append(')')
     }
 
     fun appendCaseClause(stmt: CaseClause): StringBuilder {
@@ -126,17 +150,19 @@ class GoNodeBuilder {
     }
 
     fun appendField(field: Field): StringBuilder {
-        field.names.withIndex().forEach {
-            if (it.index > 0) builder.append(", ")
-            appendIdentifier(it.value)
-        }
+        field.names.commaSeparated { appendIdentifier(it) }
         if (field.names.isNotEmpty()) builder.append(' ')
         appendExpression(field.type)
-        TODO("tag")
+        if (field.tag != null) {
+            builder.append(' ')
+            appendBasicLiteral(field.tag)
+        }
+        return builder
     }
 
     fun appendFile(file: File): StringBuilder {
-        builder.append("package ").append(file.packageName).newline().newline()
+        builder.append("package ")
+        appendIdentifier(file.packageName).newline().newline()
         file.declarations.forEach { appendDeclaration(it).newline().newline() }
         return builder
     }
@@ -148,7 +174,17 @@ class GoNodeBuilder {
     fun appendFunctionDeclaration(decl: FunctionDeclaration): StringBuilder {
         builder.append("func ")
         appendParameters(decl.receivers)
-        TODO()
+        if (decl.receivers.isNotEmpty()) builder.append(' ')
+        appendIdentifier(decl.name)
+        appendParameters(decl.type.parameters)
+        if (decl.type.results.isNotEmpty()) builder.append(' ')
+        if (decl.type.results.size == 1) appendField(decl.type.results.first())
+        else appendParameters(decl.type.results)
+        if (decl.body != null) {
+            builder.append(' ')
+            appendBlockStatement(decl.body)
+        }
+        return builder
     }
 
     fun appendFunctionLiteral(expr: FunctionLiteral): StringBuilder {
@@ -159,7 +195,24 @@ class GoNodeBuilder {
         TODO()
     }
 
-    fun appendGenericDeclaration(decl: GenericDeclaration): StringBuilder { TODO() }
+    fun appendGenericDeclaration(decl: GenericDeclaration): StringBuilder {
+        require(decl.specifications.isNotEmpty())
+        when (decl.token) {
+            Token.IMPORT -> builder.append("import ")
+            Token.CONST -> builder.append("const ")
+            Token.TYPE -> builder.append("type ")
+            Token.VAR -> builder.append("var ")
+            else -> error("Unrecognized token: " + decl.token)
+        }
+        val multiSpec = decl.specifications.size > 1
+        if (multiSpec) builder.append('(').indent()
+        decl.specifications.forEach {
+            if (multiSpec) builder.newline()
+            appendSpecification(it)
+        }
+        if (multiSpec) builder.dedent().newline().append(')')
+        return builder
+    }
 
     fun appendGoNode(node: GoNode) = when(node) {
         is Comment -> appendComment(node)
@@ -179,7 +232,20 @@ class GoNodeBuilder {
     fun appendIdentifier(id: Identifier) = builder.append(id.name)
 
     fun appendIfStatement(stmt: IfStatement): StringBuilder {
-        TODO()
+        builder.append("if ")
+        if (stmt.init != null) appendStatement(stmt.init).append("; ")
+        appendExpression(stmt.condition).append(' ')
+        appendBlockStatement(stmt.body)
+        if (stmt.elseStatement != null) {
+            builder.append(" else ")
+            appendStatement(stmt.elseStatement)
+        }
+        return builder
+    }
+
+    fun appendImportSpecification(spec: ImportSpecification): StringBuilder {
+        if (spec.name != null) appendIdentifier(spec.name).append(' ')
+        return appendBasicLiteral(spec.path)
     }
 
     fun appendIncrementDecrementStatement(stmt: IncrementDecrementStatement): StringBuilder {
@@ -213,10 +279,7 @@ class GoNodeBuilder {
     fun appendParameters(params: List<Field>): StringBuilder {
         if (params.isEmpty()) return builder
         builder.append('(')
-        params.withIndex().forEach {
-            if (it.index > 0) builder.append(", ")
-            appendField(it.value)
-        }
+        params.commaSeparated { appendField(it) }
         return builder.append(')')
     }
 
@@ -229,11 +292,14 @@ class GoNodeBuilder {
     }
 
     fun appendReturnStatement(stmt: ReturnStatement): StringBuilder {
-        TODO()
+        builder.append("return ")
+        stmt.results.commaSeparated { appendExpression(it) }
+        return builder
     }
 
     fun appendSelectorExpression(expr: SelectorExpression): StringBuilder {
-        TODO()
+        appendExpression(expr.expression).append('.')
+        return appendIdentifier(expr.selector)
     }
 
     fun appendSelectStatement(stmt: SelectStatement): StringBuilder {
@@ -248,12 +314,15 @@ class GoNodeBuilder {
         TODO()
     }
 
-    fun appendSpecification(node: Specification): StringBuilder {
-        TODO()
+    fun appendSpecification(spec: Specification) = when(spec) {
+        is ImportSpecification -> appendImportSpecification(spec)
+        is ValueSpecification -> appendValueSpecification(spec)
+        is TypeSpecification -> appendTypeSpecification(spec)
     }
 
     fun appendStarExpression(expr: StarExpression): StringBuilder {
-        TODO()
+        builder.append('*')
+        return appendExpression(expr.expression)
     }
 
     fun appendStatement(stmt: Statement) = when(stmt) {
@@ -279,7 +348,12 @@ class GoNodeBuilder {
     }
 
     fun appendStructType(expr: StructType): StringBuilder {
-        TODO()
+        builder.append("struct {").indent()
+        expr.fields.forEach { builder.newline(); appendField(it) }
+        builder.dedent()
+        if (expr.fields.isEmpty()) builder.append(' ')
+        else builder.newline()
+        return builder.append('}')
     }
 
     fun appendSwitchStatement(stmt: SwitchStatement): StringBuilder {
@@ -290,7 +364,16 @@ class GoNodeBuilder {
         TODO()
     }
 
+    fun appendTypeSpecification(spec: TypeSpecification): StringBuilder {
+        appendIdentifier(spec.name).append(' ')
+        return appendExpression(spec.type)
+    }
+
     fun appendUnaryExpression(expr: UnaryExpression): StringBuilder {
+        TODO()
+    }
+
+    fun appendValueSpecification(spec: ValueSpecification): StringBuilder {
         TODO()
     }
 }

@@ -1,5 +1,7 @@
 package goahead
 
+import org.objectweb.asm.Opcodes
+
 class ClassPath(val entries: List<ClassPath.ClassPathEntry>) {
 
     interface ClassPathEntry {
@@ -18,10 +20,12 @@ class ClassPath(val entries: List<ClassPath.ClassPathEntry>) {
     }
 
     fun fieldAccess(internalClassName: String, fieldName: String): Int {
-        TODO()
+        // TODO()
+        return Opcodes.ACC_PUBLIC
     }
 
     fun methodAccess(internalClassName: String, methodName: String, desc: String): Int {
-        TODO()
+        // TODO()
+        return Opcodes.ACC_PUBLIC
     }
 }

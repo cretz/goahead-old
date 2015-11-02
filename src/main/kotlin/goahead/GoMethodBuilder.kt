@@ -9,8 +9,8 @@ import goahead.GoNode.Statement.*
 import goahead.GoNode.Specification.*
 import org.objectweb.asm.Type
 
-class GoMethodWriter(
-    val classWriter: GoClassWriter,
+class GoMethodBuilder(
+    val classBuilder: GoClassBuilder,
     val access: Int,
     val name: String,
     val desc: String
@@ -29,8 +29,8 @@ class GoMethodWriter(
         when(opcode) {
             Opcodes.GETSTATIC ->
                 stack += SelectorExpression(
-                    classWriter.staticClassReadReference(owner),
-                    name.capitalizeOnAccess(classWriter.classPath.fieldAccess(owner, name)).toIdentifier
+                    classBuilder.staticClassReadReference(owner),
+                    name.capitalizeOnAccess(classBuilder.classPath.fieldAccess(owner, name)).toIdentifier
                 )
             else -> error("Unrecognized opcode $opcode")
         }
@@ -48,7 +48,7 @@ class GoMethodWriter(
             Opcodes.INVOKEVIRTUAL -> {
                 val callParamTypes = Type.getArgumentTypes(desc)
                 val callReturnType = Type.getReturnType(desc)
-                val params = pop(callParamTypes.size())
+                val params = pop(callParamTypes.size)
                 val subject = pop(1).first()
 
                 // We have to do a null-pointer check first
@@ -58,7 +58,7 @@ class GoMethodWriter(
                 val call = CallExpression(
                     SelectorExpression(
                         subject,
-                        name.capitalizeOnAccess(classWriter.classPath.methodAccess(owner, name, desc)).toIdentifier
+                        name.capitalizeOnAccess(classBuilder.classPath.methodAccess(owner, name, desc)).toIdentifier
                     ),
                     params
                 )
@@ -98,7 +98,7 @@ class GoMethodWriter(
             body = BlockStatement(listOf(throwError(
                 CallExpression(
                     SelectorExpression(
-                        classWriter.importPackage("goahead/rt")!!.toIdentifier,
+                        classBuilder.importPackage("goahead/rt")!!.toIdentifier,
                         "JvmErrorNullPointerException".toIdentifier
                     ),
                     emptyList()
@@ -109,7 +109,7 @@ class GoMethodWriter(
 
     fun pop(amount: Int): List<Expression> {
         val ret = stack.takeLast(amount)
-        require(ret.size() == amount)
+        require(ret.size == amount)
         stack = stack.dropLast(amount)
         return ret
     }
@@ -135,13 +135,13 @@ class GoMethodWriter(
     )
 
     fun toFunctionDeclaration(): FunctionDeclaration? {
-        val receivers =
-            if (access.isAccessStatic) emptyList<Field>()
-            else listOf(Field(listOf("this".toIdentifier), classWriter.typeToGoType(classWriter.className)))
+        var expr = classBuilder.classRefExpr(classBuilder.className, access.isAccessStatic)
+        if (access.isAccessStatic || !classBuilder.access.isAccessInterface) expr = StarExpression(expr)
+        val receivers = listOf(Field(listOf("this".toIdentifier), expr))
         return FunctionDeclaration(
             name = name.capitalizeOnAccess(access).toIdentifier,
             receivers = receivers,
-            type = classWriter.methodToFunctionType(returnType, paramTypes),
+            type = classBuilder.methodToFunctionType(returnType, paramTypes),
             body = BlockStatement(statements)
         )
     }

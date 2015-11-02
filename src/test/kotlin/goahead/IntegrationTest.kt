@@ -1,7 +1,9 @@
 package goahead
 
 import goahead.testclasses.HelloWorld
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
@@ -24,8 +26,25 @@ class IntegrationTest(val spec: IntegrationTest.TestSpec) {
         )
     }
 
+    @Rule
+    @JvmField
+    val tempFolder = TemporaryFolder();
+
     @Test
     fun test() {
+        // First thing, compile to nodes
+        val compiler = Compiler(ClassPath(emptyList()))
+        val classBytes = spec.classes.toMap(
+            { it },
+            { it.getResourceAsStream(it.simpleName + ".class").use { it.readBytes() } }
+        )
+        val outFiles = classBytes.mapValues { compiler.classFileToOutFile(it.value) }
+
+        // Now write them to strings (temporary for debug purposes right now)
+        val strings = outFiles.mapValues { GoNodeWriter.fromNode(it.value.node) }
+
+        println("Out strings: " + strings)
+
         TODO("""
             * Compile all classes to temporary dir
             * Run "gofmt -e -l" to make sure our printer is clean

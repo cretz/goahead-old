@@ -5,63 +5,63 @@ package goahead
  * a sealed interface + data class combo per https://devnet.jetbrains.com/message/5559914 and
  * https://github.com/JetBrains/kotlin/blob/master/spec-docs/sealed-hierarchies-and-when.md.
  */
-sealed abstract class GoNode {
+sealed class GoNode {
 
     /**
      * @property text It's a multiline comment if it contains newlines
      */
-    data class Comment(val text: String) : GoNode()
+    class Comment(val text: String) : GoNode()
 
-    data class Field(
+    class Field(
         val names: List<Expression.Identifier>,
         val type: Expression,
         val tag: Expression.BasicLiteral? = null
     ) : GoNode()
 
-    data class File(
+    class File(
         val packageName: Expression.Identifier,
         val declarations: List<Declaration>
     ) : GoNode()
 
-    data class Package(
+    class Package(
         val name: String,
         val files: List<File>
     ) : GoNode()
 
-    sealed abstract class Expression : GoNode() {
+    sealed class Expression : GoNode() {
 
-        data class Identifier(val name: String) : Expression()
+        class Identifier(val name: String) : Expression()
 
-        data class Ellipsis(val elementType: Expression?) : Expression()
+        class Ellipsis(val elementType: Expression?) : Expression()
 
-        data class BasicLiteral(
+        class BasicLiteral(
             val token: Token,
             val value: String
         ) : Expression()
 
-        data class FunctionLiteral(
+        class FunctionLiteral(
             val type: FunctionType,
             val body: Statement.BlockStatement
         ) : Expression()
 
-        data class CompositeLiteral(
+        class CompositeLiteral(
             val type: Expression?,
             val elements: List<Expression>
         ) : Expression()
 
-        data class ParenthesizedExpression(val expression: Expression) : Expression()
+        class ParenthesizedExpression(val expression: Expression) : Expression()
 
-        data class SelectorExpression(
+        class SelectorExpression(
             val expression: Expression,
             val selector: Identifier
         ) : Expression()
 
-        data class IndexExpression(
+        class IndexExpression(
             val expression: Expression,
             val index: Expression
         ) : Expression()
 
-        data class SliceExpression(
+        class SliceExpression(
             val expression: Expression,
             val low: Expression?,
             val high: Expression?,
@@ -69,49 +69,49 @@ sealed abstract class GoNode {
             val slice3: Boolean
         ) : Expression()
 
-        data class TypeAssertExpression(
+        class TypeAssertExpression(
             val expression: Expression,
             val type: Expression?
         ) : Expression()
 
-        data class CallExpression(
+        class CallExpression(
             val function: Expression,
             val args: List<Expression>
         ) : Expression()
 
-        data class StarExpression(val expression: Expression) : Expression()
+        class StarExpression(val expression: Expression) : Expression()
 
-        data class UnaryExpression(
+        class UnaryExpression(
             val operator: Token,
             val operand: Expression
         ) : Expression()
 
-        data class BinaryExpression(
+        class BinaryExpression(
             val left: Expression,
             val operator: Token,
             val right: Expression
         ) : Expression()
 
-        data class KeyValueExpression(
+        class KeyValueExpression(
             val key: Expression,
             val value: Expression
         ) : Expression()
 
-        data class ArrayType(
+        class ArrayType(
             val type: Expression,
             val length: Expression? = null
         ) : Expression()
 
-        data class StructType(val fields: List<Field>) : Expression()
+        class StructType(val fields: List<Field>) : Expression()
 
-        data class FunctionType(
+        class FunctionType(
             val parameters: List<Field>,
             val results: List<Field>
         ) : Expression()
 
-        data class InterfaceType(val methods: List<Field>) : Expression()
+        class InterfaceType(val methods: List<Field>) : Expression()
 
-        data class MapType(
+        class MapType(
             val key: Expression,
             val value: Expression
         ) : Expression()
@@ -120,87 +120,87 @@ sealed abstract class GoNode {
             SEND, RECV
         }
 
-        data class ChannelType(
+        class ChannelType(
             val direction: ChannelDirection,
             val value: Expression
         ) : Expression()
     }
 
-    sealed abstract class Statement : GoNode() {
+    sealed class Statement : GoNode() {
 
-        data class DeclarationStatement(val declaration: Declaration) : Statement()
+        class DeclarationStatement(val declaration: Declaration) : Statement()
 
         object EmptyStatement : Statement()
 
-        data class LabeledStatement(
+        class LabeledStatement(
             val label: Expression.Identifier,
             val statement: Statement
         ) : Statement()
 
-        data class ExpressionStatement(val expressioon: Expression) : Statement()
+        class ExpressionStatement(val expressioon: Expression) : Statement()
 
-        data class SendStatement(
+        class SendStatement(
             val channel: Expression,
             val value: Expression
         ) : Statement()
 
-        data class IncrementDecrementStatement(
+        class IncrementDecrementStatement(
             val expression: Expression,
             val token: Token
         ) : Statement()
 
-        data class AssignStatement(
+        class AssignStatement(
             val left: List<Expression>,
             val token: Token,
             val right: List<Expression>
         ) : Statement()
 
-        data class GoStatement(val call: Expression.CallExpression) : Statement()
+        class GoStatement(val call: Expression.CallExpression) : Statement()
 
-        data class DeferStatement(val call: Expression.CallExpression) : Statement()
+        class DeferStatement(val call: Expression.CallExpression) : Statement()
 
-        data class ReturnStatement(val results: List<Expression>) : Statement()
+        class ReturnStatement(val results: List<Expression>) : Statement()
 
-        data class BranchStatement(
+        class BranchStatement(
             val token: Token,
             val label: Expression.Identifier?
         ) : Statement()
 
-        data class BlockStatement(val statements: List<Statement>) : Statement()
+        class BlockStatement(val statements: List<Statement>) : Statement()
 
-        data class IfStatement(
+        class IfStatement(
             val init: Statement? = null,
             val condition: Expression,
             val body: BlockStatement,
             val elseStatement: Statement? = null
         ) : Statement()
 
-        data class CaseClause(
+        class CaseClause(
             val expressions: List<Expression>,
             val body: BlockStatement
         ) : Statement()
 
-        data class SwitchStatement(
+        class SwitchStatement(
             val init: Statement?,
             val tag: Expression?,
             val body: BlockStatement
         ) : Statement()
 
-        data class CommClause(
+        class CommClause(
             val comm: Statement?,
             val body: List<Statement>
         ) : Statement()
 
-        data class SelectStatement(val body: BlockStatement) : Statement()
+        class SelectStatement(val body: BlockStatement) : Statement()
 
-        data class ForStatement(
+        class ForStatement(
             val init: Statement?,
             val condition: Statement?,
             val post: Statement?,
             val body: BlockStatement
         ) : Statement()
 
-        data class RangeStatement(
+        class RangeStatement(
             val key: Expression?,
             val value: Expression?,
             val token: Token?,
@@ -209,33 +209,33 @@ sealed abstract class GoNode {
         ) : Statement()
     }
 
-    sealed abstract class Specification : GoNode() {
+    sealed class Specification : GoNode() {
 
-        data class ImportSpecification(
+        class ImportSpecification(
             val name: Expression.Identifier?,
             val path: Expression.BasicLiteral
         ) : Specification()
 
-        data class ValueSpecification(
+        class ValueSpecification(
             val names: List<Expression.Identifier>,
             val type: Expression?,
             val values: List<Expression.Identifier>
         ) : Specification()
 
-        data class TypeSpecification(
+        class TypeSpecification(
             val name: Expression.Identifier,
             val type: Expression
         ) : Specification()
     }
 
-    sealed abstract class Declaration : GoNode() {
+    sealed class Declaration : GoNode() {
 
-        data class GenericDeclaration(
+        class GenericDeclaration(
             val token: Token,
             val specifications: List<Specification>
         ) : Declaration()
 
-        data class FunctionDeclaration(
+        class FunctionDeclaration(
             val receivers: List<Field>,
             val name: Expression.Identifier,
             val type: Expression.FunctionType,

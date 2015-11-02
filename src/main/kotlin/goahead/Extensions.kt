@@ -6,6 +6,7 @@ import org.objectweb.asm.Type
 
 // Please keep in alphabetical order
 
+val Int.isAccessInterface: Boolean get() = this and Opcodes.ACC_INTERFACE == Opcodes.ACC_INTERFACE
 val Int.isAccessPrivate: Boolean get() = this and Opcodes.ACC_PRIVATE == Opcodes.ACC_PRIVATE
 val Int.isAccessProtected: Boolean get() = this and Opcodes.ACC_PROTECTED == Opcodes.ACC_PROTECTED
 val Int.isAccessPublic: Boolean get() = this and Opcodes.ACC_PUBLIC == Opcodes.ACC_PUBLIC
@@ -20,4 +21,5 @@ fun String.capitalizeOnAccess(access: Int): String =
 
 val String.golangUunescaped: String get() = /* TODO */ this
 val String.toIdentifier: Expression.Identifier get() = Expression.Identifier(this)
-val String.toLiteral: Expression.BasicLiteral get() = Expression.BasicLiteral(Token.STRING, this.golangUunescaped)
+val String.toLiteral: Expression.BasicLiteral get() =
+    Expression.BasicLiteral(Token.STRING, '"' + this.golangUunescaped + '"')

@@ -7,10 +7,10 @@ import java.nio.file.Paths
 
 class Compiler(
     val classPath: ClassPath,
-    val config: Compiler.Configuration
+    val config: Compiler.Configuration = Compiler.Configuration()
 ) {
     class Configuration(
-        val outDir: File
+        val outDir: File? = null
     )
 
     class OutFile(
@@ -24,7 +24,7 @@ class Compiler(
     }
 
     fun classFileToOutFile(bytes: ByteArray): OutFile {
-        val writer = GoClassWriter.fromBytes(classPath, bytes)
+        val writer = GoClassBuilder.fromBytes(classPath, bytes)
         return OutFile(
             dir = writer.packageName,
             name = writer.simpleClassName.decapitalize() + ".go",
@@ -33,9 +33,10 @@ class Compiler(
     }
 
     fun outFileToFileSystem(file: OutFile) {
+        if (config.outDir == null) error("Out directory not specified")
         val dir = File(config.outDir, file.dir)
         if (!dir.isDirectory) require(dir.mkdirs()) { "Unable to create dir" }
         val fsFile = File(dir, file.name)
-        fsFile.writeText(GoNodeBuilder.fromNode(file.node))
+        fsFile.writeText(GoNodeWriter.fromNode(file.node))
     }
 }
