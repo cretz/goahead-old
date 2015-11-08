@@ -1,5 +1,8 @@
 package goahead.testclasses;
 
+import goahead.ExpectedOutput;
+
+@ExpectedOutput("Hello world\n")
 public class HelloWorld {
 
     public static void main(String[] args) {

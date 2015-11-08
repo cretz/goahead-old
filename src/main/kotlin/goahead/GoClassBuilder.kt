@@ -6,12 +6,15 @@ import goahead.GoNode.Expression.*
 import goahead.GoNode.Declaration.*
 import goahead.GoNode.Statement.*
 import goahead.GoNode.Specification.*
+import org.slf4j.LoggerFactory
 
 class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
 
     val defaultPackageName = "main"
 
     companion object {
+        val logger = LoggerFactory.getLogger(javaClass)
+
         fun fromBytes(classPath: ClassPath, bytes: ByteArray): GoClassBuilder {
             val writer = GoClassBuilder(classPath)
             ClassReader(bytes).accept(
@@ -33,6 +36,9 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     var staticInitBlocks = emptyList<BlockStatement>()
     var staticInitAssignments = emptyList<AssignStatement>()
 
+    var hasMain = false
+    var mainUsesArgument = false
+
     override fun visit(version: Int, access: Int, name: String, signature: String?, superName: String?, interfaces: Array<out String>?) {
         this.access = access
         packageName = name.substringBeforeLast('/', defaultPackageName)
@@ -49,7 +55,8 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     }
 
     override fun visitAnnotation(desc: String?, visible: Boolean): AnnotationVisitor? {
-        TODO()
+        // TODO()
+        return null
     }
 
     override fun visitTypeAnnotation(typeRef: Int, typePath: TypePath?, desc: String?, visible: Boolean): AnnotationVisitor? {
@@ -70,9 +77,15 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
 
     override fun visitMethod(access: Int, name: String, desc: String, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
         // TODO: stop ignoring init
+        logger.debug("Visiting method {} with desc {}", name, desc)
         if (name == "<init>") return null
+        val isMain = name == "main" && access.isAccessStatic && desc == "([Ljava/lang/String;)V"
         val writer = GoMethodBuilder(this, access, name, desc)
         methods += writer
+        if (isMain) {
+            hasMain = true
+            mainUsesArgument = writer.usesArguments
+        }
         return writer
     }
 
@@ -99,10 +112,9 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     }
 
     fun methodToFunctionType(returnType: Type, paramTypes: Array<Type>): FunctionType {
-        val errorField = Field(emptyList(), classRefExpr("goahead/rt/JvmError"))
         val results =
-            if (returnType === Type.VOID_TYPE) listOf(errorField)
-            else listOf(Field(emptyList(), typeToGoType(returnType)), errorField)
+            if (returnType === Type.VOID_TYPE) emptyList<Field>()
+            else listOf(Field(emptyList(), typeToGoType(returnType)))
         val params = paramTypes.withIndex().map {
             Field(listOf(("arg" + it.index).toIdentifier), typeToGoType(it.value))
         }
@@ -120,13 +132,6 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
 
     fun toFile(): File {
         var declarations = listOf<Declaration>()
-        // Add all imports with alias if necessary
-        declarations += GenericDeclaration(Token.IMPORT, imports.map {
-            ImportSpecification(
-                name = if (it.value == it.key || it.value.endsWith("/" + it.key)) null else it.key.toIdentifier,
-                path = it.value.toLiteral
-            )
-        })
 
         // Static struct declaration
         // TODO: What we want here when we get around to static:
@@ -139,6 +144,7 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         if (!staticInitAssignments.isEmpty() || !staticInitBlocks.isEmpty()) {
             TODO("the sync.Once + init")
         }
+
         declarations += GenericDeclaration(
             token = Token.TYPE,
             specifications = listOf(TypeSpecification(
@@ -147,13 +153,43 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
             ))
         )
         // TODO: static init
+        declarations += GenericDeclaration(
+            token = Token.VAR,
+            specifications = listOf(ValueSpecification(
+                names = listOf((simpleClassName.decapitalize() + "Static").toIdentifier),
+                type = (simpleClassName + "Static").toIdentifier,
+                values = emptyList()
+            ))
+        )
+        declarations += FunctionDeclaration(
+            name = simpleClassName.toIdentifier,
+            receivers = emptyList(),
+            type = FunctionType(
+                emptyList(),
+                listOf(Field(names = emptyList(), type = StarExpression((simpleClassName + "Static").toIdentifier)))
+            ),
+            body = BlockStatement(listOf(
+                ReturnStatement(listOf(
+                    UnaryExpression(Token.AND, (simpleClassName.decapitalize() + "Static").toIdentifier)
+                ))
+            ))
+        )
 
         // All static methods
         declarations += methods.filter { it.access.isAccessStatic }.mapNoNull { it.toFunctionDeclaration() }
 
         // TODO: instance + methods
 
-        return File(packageName = packageName.toIdentifier, declarations = declarations)
+        // We need to do imports here at the end)
+        val importDeclaration = GenericDeclaration(Token.IMPORT, imports.map {
+            ImportSpecification(
+                name = if (it.value == it.key || it.value.endsWith("/" + it.key)) null else it.key.toIdentifier,
+                path = it.value.toLiteral
+            )
+        }.sortedBy { it.path.value })
+        declarations = listOf(importDeclaration) + declarations
+
+        return File(packageName = packageName.substringAfterLast('/').toIdentifier, declarations = declarations)
     }
 
     fun typeToGoType(internalName: String) = typeToGoType(Type.getType(internalName))
@@ -167,19 +203,44 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         Type.FLOAT -> "float32".toIdentifier
         Type.DOUBLE -> "float64".toIdentifier
         Type.ARRAY -> {
-            var arrayType = Expression.ArrayType(typeToGoType(type.elementType))
-            for (i in 2..type.dimensions) arrayType = Expression.ArrayType(arrayType)
+            var arrayType = ArrayType(typeToGoType(type.elementType))
+            for (i in 2..type.dimensions) arrayType = ArrayType(arrayType)
             arrayType
         }
         Type.OBJECT -> {
             // TODO: change boxed primitives to primitive pointers
             val internalName = type.internalName
-            if (internalName == "java/lang/String") Expression.StarExpression("string".toIdentifier)
-            else if (classPath.isInterface(internalName)) classRefExpr(internalName)
+            if (internalName == "java/lang/String") SelectorExpression(
+                importPackage("fmt")!!.toIdentifier,
+                "Stringer".toIdentifier
+            ) else if (classPath.isInterface(internalName)) classRefExpr(internalName)
             else Expression.StarExpression(classRefExpr(internalName))
         }
         else -> error("Unrecognized type: $type")
     }
 
+    fun buildBootstrapMainFile(): File {
+        require(hasMain)
+        require(!mainUsesArgument) { TODO() }
+        val packageAlias = packageName.substringAfterLast('/')
+        val staticCall = CallExpression(
+            SelectorExpression(packageAlias.toIdentifier, simpleClassName.toIdentifier)
+        )
+        val mainCall = CallExpression(SelectorExpression(staticCall, "Main".toIdentifier), listOf("nil".toIdentifier))
+        return File(
+            packageName = "main".toIdentifier,
+            declarations = listOf(
+                GenericDeclaration(Token.IMPORT, listOf(
+                    ImportSpecification(name = null, path = packageName.toLiteral)
+                )),
+                FunctionDeclaration(
+                    name = "main".toIdentifier,
+                    receivers = emptyList(),
+                    type = FunctionType(emptyList(), emptyList()),
+                    body = BlockStatement(listOf(ExpressionStatement(mainCall)))
+                )
+            )
+        )
+    }
 }
 

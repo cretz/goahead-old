@@ -76,7 +76,7 @@ sealed class GoNode {
 
         class CallExpression(
             val function: Expression,
-            val args: List<Expression>
+            val args: List<Expression> = emptyList()
         ) : Expression()
 
         class StarExpression(val expression: Expression) : Expression()
@@ -137,7 +137,7 @@ sealed class GoNode {
             val statement: Statement
         ) : Statement()
 
-        class ExpressionStatement(val expressioon: Expression) : Statement()
+        class ExpressionStatement(val expression: Expression) : Statement()
 
         class SendStatement(
             val channel: Expression,

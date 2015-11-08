@@ -25,7 +25,7 @@ class GoNodeWriter {
     }
 
     fun StringBuilder.newline(): StringBuilder {
-        appendln()
+        append('\n')
         for (i in 1..indention) append('\t')
         return this
     }
@@ -146,7 +146,7 @@ class GoNodeWriter {
     }
 
     fun appendExpressionStatement(stmt: ExpressionStatement): StringBuilder {
-        TODO()
+        return appendExpression(stmt.expression)
     }
 
     fun appendField(field: Field): StringBuilder {
@@ -162,8 +162,11 @@ class GoNodeWriter {
 
     fun appendFile(file: File): StringBuilder {
         builder.append("package ")
-        appendIdentifier(file.packageName).newline().newline()
-        file.declarations.forEach { appendDeclaration(it).newline().newline() }
+        appendIdentifier(file.packageName).newline()
+        file.declarations.forEach {
+            builder.newline()
+            appendDeclaration(it).newline()
+        }
         return builder
     }
 
@@ -176,7 +179,7 @@ class GoNodeWriter {
         appendParameters(decl.receivers)
         if (decl.receivers.isNotEmpty()) builder.append(' ')
         appendIdentifier(decl.name)
-        appendParameters(decl.type.parameters)
+        appendParameters(decl.type.parameters, "()")
         if (decl.type.results.isNotEmpty()) builder.append(' ')
         if (decl.type.results.size == 1) appendField(decl.type.results.first())
         else appendParameters(decl.type.results)
@@ -276,8 +279,8 @@ class GoNodeWriter {
         TODO()
     }
 
-    fun appendParameters(params: List<Field>): StringBuilder {
-        if (params.isEmpty()) return builder
+    fun appendParameters(params: List<Field>, appendOnEmpty: String = ""): StringBuilder {
+        if (params.isEmpty()) return builder.append(appendOnEmpty)
         builder.append('(')
         params.commaSeparated { appendField(it) }
         return builder.append(')')
@@ -348,6 +351,7 @@ class GoNodeWriter {
     }
 
     fun appendStructType(expr: StructType): StringBuilder {
+        if (expr.fields.isEmpty()) return builder.append("struct{}")
         builder.append("struct {").indent()
         expr.fields.forEach { builder.newline(); appendField(it) }
         builder.dedent()
@@ -370,10 +374,21 @@ class GoNodeWriter {
     }
 
     fun appendUnaryExpression(expr: UnaryExpression): StringBuilder {
-        TODO()
+        if (expr.operator.string == null) error("No string for token")
+        builder.append(expr.operator.string)
+        return appendExpression(expr.operand)
     }
 
     fun appendValueSpecification(spec: ValueSpecification): StringBuilder {
-        TODO()
+        spec.names.commaSeparated { appendIdentifier(it) }
+        if (spec.type != null) {
+            builder.append(' ')
+            appendExpression(spec.type)
+        }
+        if (!spec.values.isEmpty()) {
+            builder.append(" = ")
+            spec.values.commaSeparated { appendIdentifier(it) }
+        }
+        return builder
     }
 }

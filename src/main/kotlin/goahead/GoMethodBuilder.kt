@@ -25,6 +25,9 @@ class GoMethodBuilder(
     var tempVarCounter = 0;
     var errorVarDefined = false
 
+    // TODO
+    var usesArguments = false
+
     override fun visitFieldInsn(opcode: Int, owner: String, name: String, desc: String) {
         when(opcode) {
             Opcodes.GETSTATIC ->
@@ -38,7 +41,13 @@ class GoMethodBuilder(
 
     override fun visitLdcInsn(cst: Any) {
         when(cst) {
-            is String -> stack += cst.toLiteral
+            is String -> stack += CallExpression(
+                SelectorExpression(
+                    classBuilder.importPackage("java/lang")!!.toIdentifier,
+                    "String".toIdentifier
+                ),
+                listOf(cst.toLiteral)
+            )
             else -> error("Unrecognized constant $cst")
         }
     }
@@ -64,25 +73,16 @@ class GoMethodBuilder(
                 )
 
                 // We put the result of the call on the stack if it's not void
-                if (callReturnType === Type.VOID_TYPE) {
+                if (callReturnType !== Type.VOID_TYPE) {
                     val tempVar = newTempVar()
                     stack += tempVar
-                    statements += AssignStatement(listOf(tempVar, errorVar()), Token.DEFINE, listOf(call))
+                    statements += AssignStatement(listOf(tempVar), Token.DEFINE, listOf(call))
                 } else {
-                    val token = if (errorVarDefined) Token.ASSIGN else Token.DEFINE
-                    statements += AssignStatement(listOf(errorVar()), token, listOf(call))
+                    statements += ExpressionStatement(call)
                 }
-
-                // We "throw" if there is an error
-                statements += throwIfError()
             }
             else -> error("Unrecognized opcode $opcode")
         }
-    }
-
-    fun errorVar(): Identifier {
-        if (!errorVarDefined) errorVarDefined = true
-        return "err".toIdentifier
     }
 
     fun newTempVar() = ("temp" + tempVarCounter++).toIdentifier
@@ -98,8 +98,8 @@ class GoMethodBuilder(
             body = BlockStatement(listOf(throwError(
                 CallExpression(
                     SelectorExpression(
-                        classBuilder.importPackage("goahead/rt")!!.toIdentifier,
-                        "JvmErrorNullPointerException".toIdentifier
+                        classBuilder.importPackage("java/lang")!!.toIdentifier,
+                        "NewNullPointerExceptionInstance".toIdentifier
                     ),
                     emptyList()
                 )
@@ -115,24 +115,8 @@ class GoMethodBuilder(
     }
 
     fun throwError(expr: Expression): Statement {
-        // If this is an init, we panic
-        // If this is a void function, we return just the expr
-        // Otherwise we return nil + expr
-        if (name == "<init>" || name == "<clinit>")
-            return ExpressionStatement(CallExpression("panic".toIdentifier, listOf(expr)))
-        if (returnType === Type.VOID_TYPE)
-            return ReturnStatement(listOf(expr))
-        return ReturnStatement(listOf("nil".toIdentifier, expr))
+        return ExpressionStatement(CallExpression("panic".toIdentifier, listOf(expr)))
     }
-
-    fun throwIfError() = IfStatement(
-        condition = BinaryExpression(
-            left = errorVar(),
-            operator = Token.NEQ,
-            right = "nil".toIdentifier
-        ),
-        body = BlockStatement(listOf(throwError(errorVar())))
-    )
 
     fun toFunctionDeclaration(): FunctionDeclaration? {
         var expr = classBuilder.classRefExpr(classBuilder.className, access.isAccessStatic)
