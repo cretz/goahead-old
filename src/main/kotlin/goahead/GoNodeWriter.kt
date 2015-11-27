@@ -71,7 +71,13 @@ class GoNodeWriter {
     }
 
     fun appendBranchStatement(stmt: BranchStatement): StringBuilder {
-        TODO()
+        if (stmt.token.string == null) error("Token required")
+        builder.append(stmt.token.string)
+        if (stmt.label != null) {
+            builder.append(' ')
+            appendIdentifier(stmt.label)
+        }
+        return builder
     }
 
     fun appendCallExpression(expr: CallExpression): StringBuilder {
@@ -149,9 +155,15 @@ class GoNodeWriter {
         return appendExpression(stmt.expression)
     }
 
-    fun appendField(field: Field): StringBuilder {
-        field.names.commaSeparated { appendIdentifier(it) }
-        if (field.names.isNotEmpty()) builder.append(' ')
+    fun appendField(field: Field, padNameTo: Int? = null): StringBuilder {
+        var namesLength = 0
+        field.names.commaSeparated { namesLength += it.name.length; appendIdentifier(it) }
+        if (field.names.isNotEmpty()) {
+            if (padNameTo != null) {
+                builder.append(" ".repeat(padNameTo - (namesLength + ((field.names.size - 1) * 2))))
+            }
+            builder.append(' ')
+        }
         appendExpression(field.type)
         if (field.tag != null) {
             builder.append(' ')
@@ -268,7 +280,14 @@ class GoNodeWriter {
     }
 
     fun appendLabeledStatement(stmt: LabeledStatement): StringBuilder {
-        TODO()
+        // Remove all characters back to last newline
+        builder.delete(builder.lastIndexOf("\n") + 1, builder.length)
+        appendIdentifier(stmt.label).append(':')
+        if (stmt.statement != null) {
+            builder.newline()
+            appendStatement(stmt.statement)
+        }
+        return builder
     }
 
     fun appendMapType(expr: MapType): StringBuilder {
@@ -295,8 +314,11 @@ class GoNodeWriter {
     }
 
     fun appendReturnStatement(stmt: ReturnStatement): StringBuilder {
-        builder.append("return ")
-        stmt.results.commaSeparated { appendExpression(it) }
+        builder.append("return")
+        if (stmt.results.isNotEmpty()) {
+            builder.append(' ')
+            stmt.results.commaSeparated { appendExpression(it) }
+        }
         return builder
     }
 
@@ -353,7 +375,11 @@ class GoNodeWriter {
     fun appendStructType(expr: StructType): StringBuilder {
         if (expr.fields.isEmpty()) return builder.append("struct{}")
         builder.append("struct {").indent()
-        expr.fields.forEach { builder.newline(); appendField(it) }
+        val padTo = expr.fields.map {
+            if (it.names.isEmpty()) 0
+            else it.names.sumBy { it.name.length } + (2 * (it.names.size - 1))
+        }.max()
+        expr.fields.forEach { builder.newline(); appendField(it, padTo) }
         builder.dedent()
         if (expr.fields.isEmpty()) builder.append(' ')
         else builder.newline()

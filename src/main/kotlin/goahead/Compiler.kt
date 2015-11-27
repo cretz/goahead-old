@@ -28,7 +28,7 @@ class Compiler(
 
         fun bootstrapMainFile(): OutFile {
             if (bootstrapMain == null) error("No main bootstrap")
-            return OutFile(dir = ".", name = "main.go", node = bootstrapMain)
+            return OutFile(dir = "", name = "main.go", node = bootstrapMain)
         }
     }
 
@@ -39,7 +39,7 @@ class Compiler(
     fun classFileToOutFile(bytes: ByteArray): OutFile {
         val writer = GoClassBuilder.fromBytes(classPath, bytes)
         return OutFile(
-            dir = writer.packageName,
+            dir = if (writer.packageName == "main") "" else writer.packageName,
             name = writer.simpleClassName.decapitalize() + ".go",
             node = writer.toFile(),
             bootstrapMain =

@@ -2,7 +2,7 @@ package lang
 
 import (
 	"sync"
-	"fmt"
+	"runtime"
 )
 
 type SystemStatic struct{
@@ -21,6 +21,25 @@ func System() *SystemStatic {
 
 type SystemOut struct{}
 
-func (this *SystemOut) Println(arg0 fmt.Stringer) {
-	println(arg0.String())
+func (this *SystemOut) Println() {
+	if runtime.GOOS == "windows" {
+		print("\r\n")
+	} else {
+		print("\n")
+	}
+}
+
+func (this *SystemOut) Println__java_lang_String(arg0 *StringInstance) {
+	print(*arg0)
+	this.Println()
+}
+
+func (this *SystemOut) Println__int(arg0 int) {
+	print(arg0)
+	this.Println()
+}
+
+func (this *SystemOut) Println__boolean(arg0 bool) {
+	print(arg0)
+	this.Println()
 }

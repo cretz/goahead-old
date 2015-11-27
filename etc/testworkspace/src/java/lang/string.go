@@ -1,5 +1,16 @@
 package lang
 
-type String string
+import (
+	"unicode/utf8"
+)
 
-func (this String) String() string { return string(this) }
+type StringInstance string
+
+func NewStringInstance__java_lang_String(str string) *StringInstance {
+	inst := StringInstance(str)
+	return &inst
+}
+
+func (this StringInstance) Length() int {
+	return utf8.RuneCountInString(string(this))
+}

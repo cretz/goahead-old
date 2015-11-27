@@ -16,7 +16,8 @@ class ClassPath(val entries: List<ClassPath.ClassPathEntry>) {
     }
 
     fun isInterface(internalClassName: String): Boolean {
-        TODO()
+//        TODO()
+        return false
     }
 
     fun fieldAccess(internalClassName: String, fieldName: String): Int {

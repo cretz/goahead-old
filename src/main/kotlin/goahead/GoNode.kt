@@ -134,7 +134,7 @@ sealed class GoNode {
 
         class LabeledStatement(
             val label: Expression.Identifier,
-            val statement: Statement
+            val statement: Statement? = null // We know we differ from golang here
         ) : Statement()
 
         class ExpressionStatement(val expression: Expression) : Statement()
@@ -312,21 +312,21 @@ sealed class GoNode {
         SEMICOLON(";"),
         COLON(":"),
 
-        BREAK(),
+        BREAK("break"),
         CASE(),
         CHAN(),
         CONST(),
-        CONTINUE(),
+        CONTINUE("continue"),
 
         DEFAULT(),
         DEFER(),
         ELSE(),
-        FALLTHROUGH(),
+        FALLTHROUGH("fallthrough"),
         FOR(),
 
         FUNC(),
         GO(),
-        GOTO(),
+        GOTO("goto"),
         IF(),
         IMPORT(),
 

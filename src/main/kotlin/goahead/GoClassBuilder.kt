@@ -33,11 +33,15 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     // Key is alias, value is full path
     var imports = emptyMap<String, String>()
 
-    var staticInitBlocks = emptyList<BlockStatement>()
-    var staticInitAssignments = emptyList<AssignStatement>()
+    var instanceFields = emptyList<Field>()
+
+    var staticFields = emptyList<Field>()
+    var staticInitBuilder: GoMethodBuilder? = null
 
     var hasMain = false
     var mainUsesArgument = false
+
+    val staticVarIdentifier: Identifier get() = (simpleClassName.decapitalize() + "Static").toIdentifier
 
     override fun visit(version: Int, access: Int, name: String, signature: String?, superName: String?, interfaces: Array<out String>?) {
         this.access = access
@@ -71,8 +75,14 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         // TODO()
     }
 
-    override fun visitField(access: Int, name: String?, desc: String?, signature: String?, value: Any?): FieldVisitor? {
-        TODO()
+    override fun visitField(access: Int, name: String, desc: String, signature: String?, value: Any?): FieldVisitor? {
+        // TODO()
+        val field = Field(
+            names = listOf(name.capitalizeOnAccess(access).toIdentifier),
+            type = typeToGoType(desc)
+        )
+        if (access.isAccessStatic) staticFields += field else instanceFields += field
+        return null
     }
 
     override fun visitMethod(access: Int, name: String, desc: String, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
@@ -80,6 +90,10 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         logger.debug("Visiting method {} with desc {}", name, desc)
         if (name == "<init>") return null
         val isMain = name == "main" && access.isAccessStatic && desc == "([Ljava/lang/String;)V"
+        if (name == "<clinit>") {
+            if (staticInitBuilder == null) staticInitBuilder = GoMethodBuilder(this, access, name, desc)
+            return staticInitBuilder
+        }
         val writer = GoMethodBuilder(this, access, name, desc)
         methods += writer
         if (isMain) {
@@ -100,6 +114,18 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         return SelectorExpression(alias.toIdentifier, className.toIdentifier)
     }
 
+    fun constructorRefExpr(internalName: String, desc: String): Expression {
+        val packageName = internalName.substringBeforeLast('/', defaultPackageName)
+        // TODO: check visibility
+        val constructorName = methodName(
+            "New" + internalName.substringAfterLast('/') + "Instance",
+            desc,
+            classPath.methodAccess(internalName, "<init>", desc)
+        )
+        val alias = importPackage(packageName) ?: return constructorName.toIdentifier
+        return SelectorExpression(alias.toIdentifier, constructorName.toIdentifier)
+    }
+
     fun importPackage(internalPackageName: String): String? {
         if (internalPackageName == packageName) return null
         val originalAlias = internalPackageName.substringAfterLast('/')
@@ -107,8 +133,42 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         var counter = 0
         while (imports.containsKey(alias) && imports[alias] != internalPackageName)
             alias = originalAlias + ++counter
+        if (imports[alias] == internalPackageName) return alias
         imports += Pair(alias, internalPackageName)
         return alias
+    }
+
+    fun fieldName(owner: String, name: String): String =
+        fieldName(name, classPath.fieldAccess(owner, name))
+
+    fun fieldName(name: String, access: Int): String =
+        name.capitalizeOnAccess(access)
+
+    fun methodName(owner: String, name: String, desc: String): String =
+        methodName(name, desc, classPath.methodAccess(owner, name, desc))
+
+    fun methodName(name: String, desc: String, access: Int): String =
+        methodName(name, Type.getArgumentTypes(desc), access)
+
+    fun methodName(name: String, params: Array<Type>, access: Int): String {
+        val proper = StringBuilder(name.capitalizeOnAccess(access))
+        // We separate every method param type by double underscores
+        // TODO: do I really care about possible ambiguity here if there is a Java method w/ underscores that may match?
+        params.forEach { proper.append("__").append(typeToGolangIdentifier(it)) }
+        return proper.toString()
+    }
+
+    fun typeToGolangIdentifier(type: Type): String = when(type.sort) {
+        Type.BOOLEAN -> "boolean"
+        Type.CHAR -> "char"
+        Type.SHORT -> "short"
+        Type.INT -> "int"
+        Type.LONG -> "long"
+        Type.FLOAT -> "float"
+        Type.DOUBLE -> "double"
+        Type.ARRAY -> "arrayof_".repeat(type.dimensions) + typeToGolangIdentifier(type.elementType)
+        Type.OBJECT -> type.internalName.replace('/', '_')
+        else -> error("Unrecognized type: $type")
     }
 
     fun methodToFunctionType(returnType: Type, paramTypes: Array<Type>): FunctionType {
@@ -133,18 +193,12 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     fun toFile(): File {
         var declarations = listOf<Declaration>()
 
-        // Static struct declaration
-        // TODO: What we want here when we get around to static:
-        //  * Struct for CLASS_NAME + "Static"
-        //  * An private empty var for the static that can be populated on init if necessary
-        //  * Struct contains a sync.Once if there is init to be had along with an init function that populates stuff in the var
-        //  * At least a Class() function on the struct returning a pointer to lang.Class
-        // TODO: Static fields
-        val staticFields = emptyList<Field>()
-        if (!staticInitAssignments.isEmpty() || !staticInitBlocks.isEmpty()) {
-            TODO("the sync.Once + init")
+        if (staticInitBuilder != null) {
+            staticFields = listOf(Field(
+                names = listOf("init".toIdentifier),
+                type = SelectorExpression(importPackage("sync")!!.toIdentifier, "Once".toIdentifier)
+            )) + staticFields
         }
-
         declarations += GenericDeclaration(
             token = Token.TYPE,
             specifications = listOf(TypeSpecification(
@@ -152,15 +206,27 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
                 type = StructType(fields = staticFields)
             ))
         )
-        // TODO: static init
         declarations += GenericDeclaration(
             token = Token.VAR,
             specifications = listOf(ValueSpecification(
-                names = listOf((simpleClassName.decapitalize() + "Static").toIdentifier),
+                names = listOf(staticVarIdentifier),
                 type = (simpleClassName + "Static").toIdentifier,
                 values = emptyList()
             ))
         )
+        var staticConstructStatements = emptyList<Statement>()
+        if (staticInitBuilder != null) {
+            staticConstructStatements += ExpressionStatement(CallExpression(
+                SelectorExpression(
+                    SelectorExpression(staticVarIdentifier, "init".toIdentifier),
+                    "Do".toIdentifier
+                ),
+                listOf((simpleClassName.decapitalize() + "StaticInit").toIdentifier)
+            ))
+        }
+        staticConstructStatements += ReturnStatement(listOf(
+            UnaryExpression(Token.AND, staticVarIdentifier)
+        ))
         declarations += FunctionDeclaration(
             name = simpleClassName.toIdentifier,
             receivers = emptyList(),
@@ -168,12 +234,16 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
                 emptyList(),
                 listOf(Field(names = emptyList(), type = StarExpression((simpleClassName + "Static").toIdentifier)))
             ),
-            body = BlockStatement(listOf(
-                ReturnStatement(listOf(
-                    UnaryExpression(Token.AND, (simpleClassName.decapitalize() + "Static").toIdentifier)
-                ))
-            ))
+            body = BlockStatement(staticConstructStatements)
         )
+        if (staticInitBuilder != null) {
+            declarations += FunctionDeclaration(
+                name = (simpleClassName.decapitalize() + "StaticInit").toIdentifier,
+                receivers = emptyList(),
+                type = FunctionType(emptyList(), emptyList()),
+                body = staticInitBuilder!!.toFunctionDeclaration().body
+            )
+        }
 
         // All static methods
         declarations += methods.filter { it.access.isAccessStatic }.mapNoNull { it.toFunctionDeclaration() }
@@ -210,10 +280,11 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
         Type.OBJECT -> {
             // TODO: change boxed primitives to primitive pointers
             val internalName = type.internalName
-            if (internalName == "java/lang/String") SelectorExpression(
-                importPackage("fmt")!!.toIdentifier,
-                "Stringer".toIdentifier
-            ) else if (classPath.isInterface(internalName)) classRefExpr(internalName)
+//            if (internalName == "java/lang/String") SelectorExpression(
+//                importPackage("java/lang")!!.toIdentifier,
+//                "String".toIdentifier
+//            ) else
+            if (classPath.isInterface(internalName)) classRefExpr(internalName)
             else Expression.StarExpression(classRefExpr(internalName))
         }
         else -> error("Unrecognized type: $type")
@@ -222,24 +293,26 @@ class GoClassBuilder(val classPath: ClassPath) : ClassVisitor(Opcodes.ASM5) {
     fun buildBootstrapMainFile(): File {
         require(hasMain)
         require(!mainUsesArgument) { TODO() }
-        val packageAlias = packageName.substringAfterLast('/')
         val staticCall = CallExpression(
-            SelectorExpression(packageAlias.toIdentifier, simpleClassName.toIdentifier)
+            if (packageName == "main") simpleClassName.toIdentifier
+            else SelectorExpression(packageName.substringAfterLast('/').toIdentifier, simpleClassName.toIdentifier)
         )
-        val mainCall = CallExpression(SelectorExpression(staticCall, "Main".toIdentifier), listOf("nil".toIdentifier))
+        val mainCall = CallExpression(
+            SelectorExpression(staticCall, "Main__arrayof_java_lang_String".toIdentifier), listOf("nil".toIdentifier)
+        )
+        var declarations = emptyList<Declaration>()
+        if (packageName != "main") declarations += GenericDeclaration(Token.IMPORT, listOf(
+            ImportSpecification(name = null, path = packageName.toLiteral)
+        ))
+        declarations += FunctionDeclaration(
+            name = "main".toIdentifier,
+            receivers = emptyList(),
+            type = FunctionType(emptyList(), emptyList()),
+            body = BlockStatement(listOf(ExpressionStatement(mainCall)))
+        )
         return File(
             packageName = "main".toIdentifier,
-            declarations = listOf(
-                GenericDeclaration(Token.IMPORT, listOf(
-                    ImportSpecification(name = null, path = packageName.toLiteral)
-                )),
-                FunctionDeclaration(
-                    name = "main".toIdentifier,
-                    receivers = emptyList(),
-                    type = FunctionType(emptyList(), emptyList()),
-                    body = BlockStatement(listOf(ExpressionStatement(mainCall)))
-                )
-            )
+            declarations = declarations
         )
     }
 }
